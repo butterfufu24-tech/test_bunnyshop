@@ -1,0 +1,5 @@
+# binary assets — keep git from diffing these as text
+*.woff2 binary
+*.webp  binary
+*.jpg   binary
+*.png   binary

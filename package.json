@@ -1,0 +1,18 @@
+{
+  "name": "bunnyshop",
+  "version": "3.0.0",
+  "private": true,
+  "description": "BUNNY SHOP — single-file storefront. QA harness only; the site itself has no dependencies.",
+  "scripts": {
+    "build": "python3 v3/build3.py",
+    "serve": "python3 -m http.server 8000",
+    "qa": "node qa/shoot.js && node qa/axe.js && node qa/behavior.js",
+    "qa:shots": "node qa/shoot.js",
+    "qa:a11y": "node qa/axe.js",
+    "qa:behaviour": "node qa/behavior.js"
+  },
+  "devDependencies": {
+    "axe-core": "^4.10.0",
+    "playwright": "1.65.0"
+  }
+}

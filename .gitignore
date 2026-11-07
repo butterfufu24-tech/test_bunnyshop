@@ -1,0 +1,18 @@
+# dependencies
+node_modules/
+package-lock.json
+
+# QA output (screenshots, traces) — scripts are tracked, artefacts are not
+qa/*.png
+qa/*.jpg
+qa/out/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# python
+__pycache__/
+*.pyc
