@@ -1,0 +1,263 @@
+<script>
+(() => {
+  'use strict';
+  const $ = (s, c = document) => c.querySelector(s);
+  const $$ = (s, c = document) => Array.from(c.querySelectorAll(s));
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const money = n => '$' + n.toLocaleString('en-US');
+  const lock = on => { document.documentElement.style.overflow = on ? 'hidden' : ''; };
+
+  requestAnimationFrame(() => requestAnimationFrame(() => document.documentElement.classList.add('is-loaded')));
+
+  /* ---------- reveal ---------- */
+  const revealables = $$('[data-reveal], .rv-img');
+  if (!reduced && 'IntersectionObserver' in window) {
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        // reveal on entry, and also when a fast jump has carried the element above the viewport
+        if (e.isIntersecting || e.boundingClientRect.top < 0) {
+          e.target.classList.add('in');
+          io.unobserve(e.target);
+        }
+      }
+    }, { threshold: 0.08, rootMargin: '0px 0px -4% 0px' });
+    revealables.forEach(el => io.observe(el));
+  } else {
+    revealables.forEach(el => el.classList.add('in'));
+  }
+
+  /* ---------- header ---------- */
+  const hdr = $('#hdr');
+  let ticking = false;
+  const onScroll = () => {
+    hdr.classList.toggle('stuck', window.scrollY > 10);
+    ticking = false;
+  };
+  addEventListener('scroll', () => { if (!ticking) { ticking = true; requestAnimationFrame(onScroll); } }, { passive: true });
+  onScroll();
+
+  /* ---------- scrollspy ---------- */
+  const links = $$('[data-spy]');
+  const sections = links.map(l => document.getElementById(l.dataset.spy)).filter(Boolean);
+  if ('IntersectionObserver' in window && sections.length) {
+    const spy = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        links.forEach(l => l.dataset.spy === e.target.id
+          ? l.setAttribute('aria-current', 'true')
+          : l.removeAttribute('aria-current'));
+      }
+    }, { rootMargin: '-45% 0px -50% 0px' });
+    sections.forEach(s => spy.observe(s));
+  }
+
+  /* ---------- mobile menu ---------- */
+  const burger = $('[data-burger]');
+  const mnav = $('#mnav');
+  const setMenu = (open) => {
+    burger.setAttribute('aria-expanded', String(open));
+    burger.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+    mnav.classList.toggle('open', open);
+    mnav.setAttribute('aria-hidden', String(!open));
+    mnav.inert = !open;
+    lock(open);
+  };
+  burger.addEventListener('click', () => setMenu(burger.getAttribute('aria-expanded') !== 'true'));
+  mnav.addEventListener('click', (e) => { if (e.target.closest('a')) setMenu(false); });
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && mnav.classList.contains('open')) setMenu(false); });
+
+  /* ---------- bag ---------- */
+  const bagKey = 'bunnyshop_v3_bag';
+  const bagBtn = $('[data-bag]');
+  const bagDrawer = $('#bag');
+  const bagList = $('#bag-list');
+  const bagEmpty = $('#bag-empty');
+  const bagSub = $('#bag-sub');
+  const bagShip = $('#bag-ship');
+  const bagTotal = $('#bag-total');
+  const bagCount = $('#bag-count');
+  let bag = JSON.parse(localStorage.getItem(bagKey) || '[]');
+
+  const saveBag = () => localStorage.setItem(bagKey, JSON.stringify(bag));
+  const subtotal = () => bag.reduce((s, i) => s + i.price * i.qty, 0);
+  const ship = () => (subtotal() >= 120 || subtotal() === 0) ? 0 : 12;
+  const total = () => subtotal() + ship();
+  const count = () => bag.reduce((s, i) => s + i.qty, 0);
+
+  const renderBag = () => {
+    bagCount.textContent = count() || '';
+    bagCount.hidden = count() === 0;
+    bagEmpty.hidden = bag.length > 0;
+    bagList.hidden = bag.length === 0;
+    bagList.innerHTML = bag.map((i, idx) => `
+      <li class="bag__item">
+        <div class="bag__info">
+          <strong>${i.name}</strong>
+          <span>${money(i.price)}</span>
+        </div>
+        <div class="bag__qty">
+          <button type="button" data-dec="${idx}" aria-label="Decrease">−</button>
+          <span>${i.qty}</span>
+          <button type="button" data-inc="${idx}" aria-label="Increase">+</button>
+        </div>
+        <button type="button" class="bag__rm" data-rm="${idx}" aria-label="Remove">×</button>
+      </li>`).join('');
+    bagSub.textContent = money(subtotal());
+    bagShip.textContent = ship() === 0 ? 'Free' : money(ship());
+    bagTotal.textContent = money(total());
+  };
+
+  const openBag = () => {
+    bagDrawer.classList.add('open');
+    bagDrawer.setAttribute('aria-hidden', 'false');
+    lock(true);
+    renderBag();
+  };
+  const closeBag = () => {
+    bagDrawer.classList.remove('open');
+    bagDrawer.setAttribute('aria-hidden', 'true');
+    lock(false);
+  };
+
+  bagBtn.addEventListener('click', openBag);
+  $('[data-bag-close]').addEventListener('click', closeBag);
+  $('[data-bag-scrim]').addEventListener('click', closeBag);
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && bagDrawer.classList.contains('open')) closeBag(); });
+
+  bagList.addEventListener('click', (e) => {
+    const dec = e.target.closest('[data-dec]');
+    const inc = e.target.closest('[data-inc]');
+    const rm = e.target.closest('[data-rm]');
+    if (dec) { const i = +dec.dataset.dec; bag[i].qty--; if (bag[i].qty <= 0) bag.splice(i, 1); saveBag(); renderBag(); }
+    if (inc) { bag[+inc.dataset.inc].qty++; saveBag(); renderBag(); }
+    if (rm) { bag.splice(+rm.dataset.rm, 1); saveBag(); renderBag(); }
+  });
+
+  $$('[data-add]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const name = btn.dataset.name;
+      const price = +btn.dataset.price;
+      const existing = bag.find(i => i.name === name && i.price === price);
+      if (existing) existing.qty++;
+      else bag.push({ name, price, qty: 1 });
+      saveBag();
+      renderBag();
+      toast('Added to bag');
+    });
+  });
+
+  /* ---------- gift toggle ---------- */
+  const giftToggle = $('[data-gift-toggle]');
+  if (giftToggle) {
+    giftToggle.addEventListener('change', () => {
+      const member = giftToggle.checked;
+      $$('[data-gift-price]').forEach(el => {
+        el.textContent = money(+el.dataset[member ? 'member' : 'one']);
+      });
+      $$('[data-add][data-gift]').forEach(btn => {
+        btn.dataset.price = btn.dataset[member ? 'member' : 'one'];
+      });
+    });
+  }
+
+  /* ---------- filter ---------- */
+  const chips = $$('[data-filter]');
+  const cards = $$('[data-cat]');
+  const live = $('[data-live]');
+  chips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      chips.forEach(c => c.setAttribute('aria-pressed', 'false'));
+      chip.setAttribute('aria-pressed', 'true');
+      const f = chip.dataset.filter;
+      let n = 0;
+      cards.forEach(card => {
+        const show = f === 'all' || card.dataset.cat === f;
+        card.hidden = !show;
+        if (show) n++;
+      });
+      const seconds = $('[data-seconds]');
+      if (seconds) seconds.hidden = f !== 'all';
+      if (live) live.textContent = n + ' items';
+    });
+  });
+
+  /* ---------- toast ---------- */
+  const toastEl = $('#toast');
+  const toast = (msg) => {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    setTimeout(() => toastEl.classList.remove('show'), 2200);
+  };
+
+  /* ---------- faq ---------- */
+  $$('.faq__item').forEach(item => {
+    const q = $('.faq__q', item);
+    q.addEventListener('click', () => {
+      const isOpen = q.getAttribute('aria-expanded') === 'true';
+      $$('.faq__item').forEach(other => {
+        if (other !== item) {
+          $('.faq__q', other).setAttribute('aria-expanded', 'false');
+          other.classList.remove('open');
+        }
+      });
+      q.setAttribute('aria-expanded', String(!isOpen));
+      item.classList.toggle('open', !isOpen);
+    });
+  });
+
+  /* ---------- counters ---------- */
+  const counters = $$('[data-count]');
+  const run = (el) => {
+    const target = parseInt(el.dataset.count, 10);
+    if (reduced) { el.textContent = target.toLocaleString('en-US'); return; }
+    const t0 = performance.now(), dur = 1600;
+    const tick = (now) => {
+      const p = Math.min((now - t0) / dur, 1);
+      const eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(target * eased).toLocaleString('en-US');
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  };
+  if ('IntersectionObserver' in window) {
+    const cio = new IntersectionObserver((entries) => {
+      for (const e of entries) if (e.isIntersecting) { run(e.target); cio.unobserve(e.target); }
+    }, { threshold: 0.6 });
+    counters.forEach(c => cio.observe(c));
+  } else counters.forEach(run);
+
+  /* ---------- signup ---------- */
+  const form = $('#signup');
+  const email = $('#email');
+  const msg = $('#form-msg');
+  const done = $('#signup-done');
+  const valid = v => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim());
+
+  email.addEventListener('input', () => {
+    if (email.getAttribute('aria-invalid') === 'true' && valid(email.value)) {
+      email.removeAttribute('aria-invalid');
+      msg.textContent = ''; msg.className = 'form__msg';
+    }
+  });
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!valid(email.value)) {
+      email.setAttribute('aria-invalid', 'true');
+      msg.textContent = 'That address does not look right.';
+      msg.className = 'form__msg err';
+      email.focus();
+      return;
+    }
+    email.removeAttribute('aria-invalid');
+    msg.textContent = '';
+    form.style.display = 'none';
+    done.classList.add('show');
+    toast('You are on the list');
+  });
+
+  /* ---------- misc ---------- */
+  $('#year').textContent = new Date().getFullYear();
+})();
+</script>
+</body>
+</html>
